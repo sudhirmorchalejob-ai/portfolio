@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import CosmicTemplate from "../templates/CosmicTemplate";
 import EmberTemplate from "../templates/EmberTemplate";
+import AuroraTemplate from "../templates/AuroraTemplate";
+import ForgeTemplate from "../templates/ForgeTemplate";
 
 export default function PreviewPage({ userData, selectedTemplate }) {
   const navigate = useNavigate();
@@ -13,8 +15,8 @@ export default function PreviewPage({ userData, selectedTemplate }) {
     { id:"mobile", label:"Mobile", width:"390px" },
   ];
 
-  const accent = selectedTemplate === "ember" ? "#ff4d00" : "#7b2fff";
-  const accentAlt = selectedTemplate === "ember" ? "#ff9a3c" : "#00f5d4";
+  const accent = selectedTemplate==="ember"?"#ff4d00":selectedTemplate==="aurora"?"#06b6d4":selectedTemplate==="forge"?"#eab308":"#7b2fff";
+  const accentAlt = selectedTemplate==="ember"?"#ff9a3c":selectedTemplate==="aurora"?"#818cf8":selectedTemplate==="forge"?"#f97316":"#00f5d4";
 
   return (
     <div style={{ minHeight:"100vh", background:"#0a0a0f", display:"flex", flexDirection:"column" }}>
@@ -33,7 +35,7 @@ export default function PreviewPage({ userData, selectedTemplate }) {
           </button>
           <div style={{ width:"1px", height:"24px", background:"rgba(255,255,255,0.08)" }} />
           <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:"11px", color:"rgba(255,250,230,0.3)", letterSpacing:"0.1em" }}>
-            LIVE PREVIEW · <span style={{ color:accentAlt }}>{selectedTemplate === "cosmic" ? "COSMIC" : "EMBER"}</span>
+            LIVE PREVIEW · <span style={{ color:accentAlt }}>{selectedTemplate==="cosmic"?"COSMIC":selectedTemplate==="ember"?"EMBER":selectedTemplate==="aurora"?"AURORA":"FORGE"}</span>
           </span>
         </div>
 
@@ -80,10 +82,7 @@ export default function PreviewPage({ userData, selectedTemplate }) {
           borderRadius: device === "desktop" ? "0" : "12px",
           overflow:"hidden",
         }}>
-          {selectedTemplate === "cosmic"
-            ? <CosmicTemplate data={userData} />
-            : <EmberTemplate data={userData} />
-          }
+          {selectedTemplate==="cosmic"?<CosmicTemplate data={userData}/>:selectedTemplate==="ember"?<EmberTemplate data={userData}/>:selectedTemplate==="aurora"?<AuroraTemplate data={userData}/>:<ForgeTemplate data={userData}/>}
         </div>
       </div>
 
