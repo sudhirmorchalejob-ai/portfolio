@@ -120,6 +120,7 @@ export default function CosmicTemplate({ data }) {
     name = "Your Name",
     title = "Your Title",
     about = "",
+    photo = "",
     skills = [],
     projects = [],
     education = "",
@@ -178,10 +179,17 @@ export default function CosmicTemplate({ data }) {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "40px", flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: "300px" }}>
-            {/* Status badge */}
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "5px 14px", border: "1px solid rgba(0,245,212,0.25)", borderRadius: "20px", marginBottom: "24px", background: "rgba(0,245,212,0.04)" }}>
-              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#00f5d4", boxShadow: "0 0 8px #00f5d4, 0 0 16px rgba(0,245,212,0.5)" }} />
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", color: "#00f5d4", letterSpacing: "0.12em" }}>Open to opportunities</span>
+            {/* Photo + badge row */}
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "24px" }}>
+              {photo && (
+                <div style={{ width: "64px", height: "64px", borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(0,245,212,0.5)", flexShrink: 0, boxShadow: "0 0 24px rgba(0,245,212,0.25)" }}>
+                  <img src={photo} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+              )}
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "5px 14px", border: "1px solid rgba(0,245,212,0.25)", borderRadius: "20px", background: "rgba(0,245,212,0.04)" }}>
+                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#00f5d4", boxShadow: "0 0 8px #00f5d4, 0 0 16px rgba(0,245,212,0.5)" }} />
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", color: "#00f5d4", letterSpacing: "0.12em" }}>Open to opportunities</span>
+              </div>
             </div>
 
             {/* Name */}

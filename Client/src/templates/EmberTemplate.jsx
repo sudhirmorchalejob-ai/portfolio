@@ -62,6 +62,7 @@ export default function EmberTemplate({ data }) {
     name = "Your Name",
     title = "Your Title",
     about = "",
+    photo = "",
     skills = [],
     projects = [],
     education = "",
@@ -98,12 +99,19 @@ export default function EmberTemplate({ data }) {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "40px", flexWrap: "wrap", position: "relative", zIndex: 1 }}>
           <div style={{ flex: 1, minWidth: "280px" }}>
-            {/* Eyebrow */}
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
-              <div style={{ width: "32px", height: "2px", background: "linear-gradient(90deg, #ff4d00, #ff9a3c)" }} />
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", letterSpacing: "0.25em", color: "rgba(255,154,60,0.7)", textTransform: "uppercase" }}>
-                Portfolio
-              </span>
+            {/* Eyebrow + Photo */}
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "20px" }}>
+              {photo && (
+                <div style={{ width: "68px", height: "68px", borderRadius: "50%", overflow: "hidden", border: "3px solid rgba(255,77,0,0.5)", flexShrink: 0, boxShadow: "0 0 24px rgba(255,77,0,0.3)" }}>
+                  <img src={photo} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "32px", height: "2px", background: "linear-gradient(90deg, #ff4d00, #ff9a3c)" }} />
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", letterSpacing: "0.25em", color: "rgba(255,154,60,0.7)", textTransform: "uppercase" }}>
+                  Portfolio
+                </span>
+              </div>
             </div>
 
             {/* Name */}

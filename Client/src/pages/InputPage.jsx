@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import ParticleField from "../components/ParticleField";
 import Navbar from "../components/Navbar";
+import LinkedInModal from "../components/LinkedInModal";
 
 export default function InputPage({ userData, setUserData, selectedTemplate }) {
   const navigate = useNavigate();
@@ -11,15 +12,19 @@ export default function InputPage({ userData, setUserData, selectedTemplate }) {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [activeSection, setActiveSection] = useState("basic");
+  const [showLinkedIn, setShowLinkedIn] = useState(false);
+  const [linkedInConnected, setLinkedInConnected] = useState(false);
   const fileRef = useRef();
 
   const accent = selectedTemplate === "ember" ? "#ff4d00" : "#7b2fff";
   const accentAlt = selectedTemplate === "ember" ? "#ff9a3c" : "#00f5d4";
+  const LI_BLUE = "#0A66C2";
 
   const [form, setForm] = useState({
     name: userData.name || "",
     title: userData.title || "",
     about: userData.about || "",
+    photo: userData.photo || "",
     skills: (userData.skills || []).join(", "),
     education: userData.education || "",
     experience: userData.experience || "",
@@ -39,77 +44,154 @@ export default function InputPage({ userData, setUserData, selectedTemplate }) {
   };
 
   const sections = [
-    { id:"basic", label:"Identity", icon:"◈" },
-    { id:"skills", label:"Skills", icon:"◎" },
-    { id:"projects", label:"Projects", icon:"◉" },
-    { id:"career", label:"Career", icon:"◐" },
-    { id:"contact", label:"Contact", icon:"◑" },
+    { id: "basic", label: "Identity", icon: "◈" },
+    { id: "skills", label: "Skills", icon: "◎" },
+    { id: "projects", label: "Projects", icon: "◉" },
+    { id: "career", label: "Career", icon: "◐" },
+    { id: "contact", label: "Contact", icon: "◑" },
   ];
 
-  const handleSubmit = (e) => {
+  const syncFormAndData = (d, goToPreview = true) => {
+    const normalized = {
+      name: d.name || form.name,
+      title: d.title || form.title,
+      about: d.about || form.about,
+      photo: d.photo || form.photo || "",
+      skills: d.skills || form.skills.split(",").map(s => s.trim()).filter(Boolean),
+      education: d.education || form.education,
+      experience: d.experience || form.experience,
+      projects: d.projects?.length ? d.projects : form.projects.filter(p => p.title),
+      contact: d.contact || { email: form.email, phone: form.phone, linkedin: form.linkedin, github: form.github, website: form.website },
+      _linkedinMeta: d._linkedinMeta || null,
+    };
+    setUserData(normalized);
+    setForm({
+      name: normalized.name, title: normalized.title, about: normalized.about, photo: normalized.photo,
+      skills: Array.isArray(normalized.skills) ? normalized.skills.join(", ") : normalized.skills,
+      education: normalized.education, experience: normalized.experience,
+      projects: normalized.projects?.length ? normalized.projects : [{ title: "", description: "" }],
+      email: normalized.contact?.email || "", phone: normalized.contact?.phone || "",
+      linkedin: normalized.contact?.linkedin || "", github: normalized.contact?.github || "",
+      website: normalized.contact?.website || "",
+    });
+    if (goToPreview) navigate("/preview");
+  };
+
+  const handleFormSubmit = (e) => {
     e.preventDefault();
-    setUserData({
-      name: form.name, title: form.title, about: form.about,
+    syncFormAndData({
+      name: form.name, title: form.title, about: form.about, photo: form.photo,
       skills: form.skills.split(",").map(s => s.trim()).filter(Boolean),
       education: form.education, experience: form.experience,
       projects: form.projects.filter(p => p.title),
-      contact: { email:form.email, phone:form.phone, linkedin:form.linkedin, github:form.github, website:form.website },
+      contact: { email: form.email, phone: form.phone, linkedin: form.linkedin, github: form.github, website: form.website },
     });
-    navigate("/preview");
   };
 
   const handleUpload = async (file) => {
     if (!file) return;
     const ext = file.name.split(".").pop().toLowerCase();
-    if (!["pdf","docx"].includes(ext)) { setUploadStatus({ type:"error", msg:"Only PDF or DOCX files." }); return; }
+    if (!["pdf", "docx"].includes(ext)) { setUploadStatus({ type: "error", msg: "Only PDF or DOCX files." }); return; }
     setUploading(true); setUploadStatus(null);
     const fd = new FormData(); fd.append("resume", file);
     try {
       const res = await axios.post("/api/parse-resume", fd);
       const d = res.data.data;
-      setUserData(d);
-      setForm({ name:d.name||"", title:d.title||"", about:d.about||"", skills:(d.skills||[]).join(", "),
-        education:d.education||"", experience:d.experience||"",
-        projects:d.projects?.length?d.projects:[{title:"",description:""}],
-        email:d.contact?.email||"", phone:d.contact?.phone||"", linkedin:d.contact?.linkedin||"", github:d.contact?.github||"", website:d.contact?.website||"",
-      });
-      setUploadStatus({ type:"success", msg:`Parsed! Found ${d.skills?.length||0} skills, ${d.projects?.length||0} projects.` });
-    } catch(err) {
-      setUploadStatus({ type:"error", msg:err.response?.data?.error||"Parse failed. Try the manual form." });
+      syncFormAndData(d, false);
+      setUploadStatus({ type: "success", msg: `Parsed! Found ${d.skills?.length || 0} skills, ${d.projects?.length || 0} projects.` });
+    } catch (err) {
+      setUploadStatus({ type: "error", msg: err.response?.data?.error || "Parse failed." });
     } finally { setUploading(false); }
   };
 
-  const inputStyle = {
-    background:"rgba(255,255,255,0.03)", border:`1px solid rgba(255,255,255,0.08)`, color:"#fffae6",
-    padding:"12px 16px", fontFamily:"'Outfit',sans-serif", fontSize:"14px", width:"100%",
-    outline:"none", borderRadius:"4px", transition:"border-color 0.2s, box-shadow 0.2s",
+  const handleLinkedInSuccess = (profileData) => {
+    setLinkedInConnected(true);
+    syncFormAndData(profileData, false);
+    setUploadStatus({ type: "linkedin", msg: `LinkedIn profile imported for ${profileData.name}` });
+    setMode("form");
+    setActiveSection("basic");
   };
 
-  const labelStyle = { fontFamily:"'JetBrains Mono',monospace", fontSize:"10px", letterSpacing:"0.2em", textTransform:"uppercase", color:`${accentAlt}80`, display:"block", marginBottom:"6px" };
+  const inputStyle = {
+    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fffae6",
+    padding: "12px 16px", fontFamily: "'Outfit',sans-serif", fontSize: "14px", width: "100%",
+    outline: "none", borderRadius: "4px", transition: "border-color 0.2s, box-shadow 0.2s",
+  };
+  const labelStyle = {
+    fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: "0.2em",
+    textTransform: "uppercase", color: `${accentAlt}80`, display: "block", marginBottom: "6px",
+  };
+  const focusIn = (e) => { e.target.style.borderColor = `${accentAlt}60`; e.target.style.boxShadow = `0 0 0 3px ${accentAlt}08`; };
+  const focusOut = (e) => { e.target.style.borderColor = "rgba(255,255,255,0.08)"; e.target.style.boxShadow = "none"; };
 
   return (
-    <div style={{ minHeight:"100vh", background:"#03020a", position:"relative", paddingTop:"64px" }}>
+    <div style={{ minHeight: "100vh", background: "#03020a", position: "relative", paddingTop: "64px" }}>
       <Navbar step={2} />
-      <div style={{ position:"fixed", inset:0, zIndex:0, opacity:0.3 }}>
+
+      {showLinkedIn && (
+        <LinkedInModal
+          onClose={() => setShowLinkedIn(false)}
+          onSuccess={handleLinkedInSuccess}
+          accent={accent}
+          accentAlt={accentAlt}
+        />
+      )}
+
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, opacity: 0.3 }}>
         <ParticleField color={accent} count={60} speed={0.2} />
       </div>
-      <div style={{ position:"fixed", inset:0, zIndex:0, background:`radial-gradient(ellipse 70% 50% at 20% 30%, ${accent}10 0%, transparent 60%)` }} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, background: `radial-gradient(ellipse 70% 50% at 20% 30%, ${accent}10 0%, transparent 60%)` }} />
 
-      <div style={{ position:"relative", zIndex:1, maxWidth:"1100px", margin:"0 auto", padding:"40px 40px 80px", display:"grid", gridTemplateColumns:"220px 1fr", gap:"40px" }}>
+      <div style={{ position: "relative", zIndex: 1, maxWidth: "1100px", margin: "0 auto", padding: "40px 40px 80px", display: "grid", gridTemplateColumns: "220px 1fr", gap: "40px" }}>
 
-        {/* Left sidebar */}
+        {/* ── SIDEBAR ── */}
         <div>
+          {/* LinkedIn Button */}
+          <div style={{ marginBottom: "20px" }}>
+            <button
+              onClick={() => setShowLinkedIn(true)}
+              style={{
+                width: "100%", padding: "12px 14px",
+                background: linkedInConnected ? "rgba(10,102,194,0.15)" : "rgba(10,102,194,0.08)",
+                border: `1px solid ${linkedInConnected ? "rgba(10,102,194,0.6)" : "rgba(10,102,194,0.25)"}`,
+                borderRadius: "8px", cursor: "pointer",
+                display: "flex", alignItems: "center", gap: "10px", transition: "all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(10,102,194,0.2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = linkedInConnected ? "rgba(10,102,194,0.15)" : "rgba(10,102,194,0.08)"; }}
+            >
+              <div style={{ width: "28px", height: "28px", background: LI_BLUE, borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ color: "white", fontFamily: "'Syne',sans-serif", fontWeight: "800", fontSize: "13px" }}>in</span>
+              </div>
+              <div style={{ flex: 1, textAlign: "left" }}>
+                <p style={{ fontFamily: "'Outfit',sans-serif", fontWeight: "600", fontSize: "12px", color: "#fffae6", margin: 0 }}>
+                  {linkedInConnected ? "LinkedIn Connected" : "Import from LinkedIn"}
+                </p>
+                <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "9px", color: linkedInConnected ? "#22c55e" : "rgba(255,250,230,0.3)", margin: 0, letterSpacing: "0.08em" }}>
+                  {linkedInConnected ? "● SYNCED" : "One-click import"}
+                </p>
+              </div>
+              {linkedInConnected && <span style={{ color: "#22c55e", fontSize: "15px" }}>✓</span>}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
+            <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.06)" }} />
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "9px", color: "rgba(255,250,230,0.2)", letterSpacing: "0.15em" }}>OR</span>
+            <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.06)" }} />
+          </div>
+
           {/* Mode toggle */}
-          <div style={{ marginBottom:"32px" }}>
-            <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:"10px", letterSpacing:"0.2em", color:"rgba(255,250,230,0.3)", marginBottom:"12px", textTransform:"uppercase" }}>Input Mode</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
-              {[{id:"form",label:"✏  Manual Form"},{id:"upload",label:"⬆  Upload Resume"}].map(m => (
+          <div style={{ marginBottom: "28px" }}>
+            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: "0.2em", color: "rgba(255,250,230,0.3)", marginBottom: "10px", textTransform: "uppercase" }}>Input Mode</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {[{ id: "form", label: "✏  Manual Form" }, { id: "upload", label: "⬆  Upload Resume" }].map(m => (
                 <button key={m.id} onClick={() => setMode(m.id)} style={{
-                  padding:"10px 14px", textAlign:"left", background: mode===m.id ? `${accent}18` : "transparent",
-                  border:`1px solid ${mode===m.id ? accent+"50" : "rgba(255,255,255,0.06)"}`,
-                  color: mode===m.id ? "#fffae6" : "rgba(255,250,230,0.4)",
-                  fontFamily:"'Outfit',sans-serif", fontSize:"13px", cursor:"pointer", borderRadius:"4px",
-                  transition:"all 0.2s",
+                  padding: "10px 14px", textAlign: "left",
+                  background: mode === m.id ? `${accent}18` : "transparent",
+                  border: `1px solid ${mode === m.id ? accent + "50" : "rgba(255,255,255,0.06)"}`,
+                  color: mode === m.id ? "#fffae6" : "rgba(255,250,230,0.4)",
+                  fontFamily: "'Outfit',sans-serif", fontSize: "13px", cursor: "pointer", borderRadius: "4px", transition: "all 0.2s",
                 }}>
                   {m.label}
                 </button>
@@ -117,181 +199,206 @@ export default function InputPage({ userData, setUserData, selectedTemplate }) {
             </div>
           </div>
 
-          {/* Section nav (form only) */}
+          {/* Section nav */}
           {mode === "form" && (
             <div>
-              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:"10px", letterSpacing:"0.2em", color:"rgba(255,250,230,0.3)", marginBottom:"12px", textTransform:"uppercase" }}>Sections</div>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: "0.2em", color: "rgba(255,250,230,0.3)", marginBottom: "10px", textTransform: "uppercase" }}>Sections</div>
               {sections.map(s => (
                 <button key={s.id} onClick={() => setActiveSection(s.id)} style={{
-                  display:"flex", alignItems:"center", gap:"10px", width:"100%", padding:"10px 14px",
-                  background: activeSection===s.id ? `${accent}15` : "transparent",
-                  border:`1px solid ${activeSection===s.id ? accent+"40" : "transparent"}`,
-                  color: activeSection===s.id ? "#fffae6" : "rgba(255,250,230,0.4)",
-                  fontFamily:"'Outfit',sans-serif", fontSize:"13px", cursor:"pointer", borderRadius:"4px",
-                  marginBottom:"4px", textAlign:"left", transition:"all 0.2s",
+                  display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "10px 14px",
+                  background: activeSection === s.id ? `${accent}15` : "transparent",
+                  border: `1px solid ${activeSection === s.id ? accent + "40" : "transparent"}`,
+                  color: activeSection === s.id ? "#fffae6" : "rgba(255,250,230,0.4)",
+                  fontFamily: "'Outfit',sans-serif", fontSize: "13px", cursor: "pointer", borderRadius: "4px",
+                  marginBottom: "4px", textAlign: "left", transition: "all 0.2s",
                 }}>
-                  <span style={{ color:`${accent}80`, fontFamily:"monospace", fontSize:"14px" }}>{s.icon}</span>
+                  <span style={{ color: `${accent}80`, fontFamily: "monospace", fontSize: "14px" }}>{s.icon}</span>
                   {s.label}
                 </button>
               ))}
             </div>
           )}
+
+          {/* Photo preview */}
+          {form.photo && (
+            <div style={{ marginTop: "20px", padding: "12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px" }}>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "9px", color: "rgba(255,250,230,0.3)", letterSpacing: "0.15em", marginBottom: "8px", textTransform: "uppercase" }}>Profile Photo</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "50%", overflow: "hidden", border: `2px solid ${accentAlt}40` }}>
+                  <img src={form.photo} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+                <div>
+                  <p style={{ fontFamily: "'Outfit',sans-serif", fontSize: "11px", color: "rgba(255,250,230,0.5)", margin: 0 }}>Photo loaded</p>
+                  <button onClick={() => set("photo", "")} style={{ background: "none", border: "none", fontFamily: "'JetBrains Mono',monospace", fontSize: "9px", color: "rgba(255,77,0,0.5)", cursor: "pointer", padding: 0 }}>remove ✕</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Right content */}
+        {/* ── MAIN ── */}
         <div>
-          <div style={{ marginBottom:"32px" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"12px" }}>
-              <div style={{ width:"20px", height:"1px", background:accentAlt }} />
-              <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:"10px", letterSpacing:"0.3em", color:accentAlt, textTransform:"uppercase" }}>Step 02 of 03</span>
+          <div style={{ marginBottom: "28px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+              <div style={{ width: "20px", height: "1px", background: accentAlt }} />
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: "0.3em", color: accentAlt, textTransform: "uppercase" }}>Step 02 of 03</span>
             </div>
-            <h1 style={{ fontFamily:"'Syne',sans-serif", fontSize:"40px", fontWeight:"800", letterSpacing:"-0.02em", color:"#fffae6" }}>
+            <h1 style={{ fontFamily: "'Syne',sans-serif", fontSize: "36px", fontWeight: "800", letterSpacing: "-0.02em", color: "#fffae6" }}>
               {mode === "form" ? "Build your profile" : "Upload & auto-fill"}
             </h1>
           </div>
+
+          {/* Status banner */}
+          {uploadStatus && (
+            <div style={{
+              marginBottom: "20px", padding: "12px 16px", borderRadius: "6px",
+              display: "flex", alignItems: "center", gap: "10px",
+              background: uploadStatus.type === "linkedin" ? "rgba(10,102,194,0.1)" : uploadStatus.type === "success" ? "rgba(0,245,212,0.08)" : "rgba(255,77,0,0.08)",
+              border: `1px solid ${uploadStatus.type === "linkedin" ? "rgba(10,102,194,0.4)" : uploadStatus.type === "success" ? "rgba(0,245,212,0.3)" : "rgba(255,77,0,0.3)"}`,
+              color: uploadStatus.type === "linkedin" ? "#60a5fa" : uploadStatus.type === "success" ? "#00f5d4" : "#ff6b3d",
+              fontFamily: "'Outfit',sans-serif", fontSize: "13px",
+            }}>
+              {uploadStatus.type === "linkedin" && (
+                <div style={{ width: "20px", height: "20px", background: LI_BLUE, borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "10px", color: "white", flexShrink: 0 }}>in</div>
+              )}
+              {uploadStatus.msg}
+              {(uploadStatus.type === "linkedin" || uploadStatus.type === "success") && (
+                <button onClick={() => navigate("/preview")} style={{ marginLeft: "auto", background: "none", border: "none", color: "inherit", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: "700", fontSize: "12px", whiteSpace: "nowrap" }}>
+                  Preview Portfolio →
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Upload mode */}
           {mode === "upload" && (
             <div>
               <div
-                onDragOver={e=>{e.preventDefault();setDragOver(true)}}
-                onDragLeave={()=>setDragOver(false)}
-                onDrop={e=>{e.preventDefault();setDragOver(false);handleUpload(e.dataTransfer.files[0])}}
-                onClick={()=>fileRef.current.click()}
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files[0]); }}
+                onClick={() => fileRef.current.click()}
                 style={{
-                  border:`2px dashed ${dragOver ? accentAlt : accent+"40"}`,
-                  borderRadius:"8px", padding:"60px 40px", textAlign:"center", cursor:"pointer",
-                  background: dragOver ? `${accentAlt}08` : `${accent}05`,
-                  transition:"all 0.3s",
-                  position:"relative", overflow:"hidden",
+                  border: `2px dashed ${dragOver ? accentAlt : accent + "40"}`,
+                  borderRadius: "8px", padding: "60px 40px", textAlign: "center", cursor: "pointer",
+                  background: dragOver ? `${accentAlt}08` : `${accent}05`, transition: "all 0.3s",
                 }}
               >
                 {uploading ? (
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"16px" }}>
-                    <div style={{ width:"40px", height:"40px", border:`2px solid ${accent}`, borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
-                    <p style={{ fontFamily:"'Outfit',sans-serif", color:"rgba(255,250,230,0.5)", fontSize:"14px" }}>Parsing your resume with AI…</p>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
+                    <div style={{ width: "40px", height: "40px", border: `2px solid ${accent}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    <p style={{ fontFamily: "'Outfit',sans-serif", color: "rgba(255,250,230,0.5)", fontSize: "14px" }}>Parsing your resume…</p>
                     <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
                   </div>
                 ) : (
                   <>
-                    <div style={{ fontSize:"40px", marginBottom:"16px", opacity:0.5 }}>⬆</div>
-                    <p style={{ fontFamily:"'Syne',sans-serif", fontSize:"20px", fontWeight:"700", color:"#fffae6", marginBottom:"8px" }}>Drop your resume here</p>
-                    <p style={{ fontFamily:"'Outfit',sans-serif", fontSize:"13px", color:"rgba(255,250,230,0.3)" }}>PDF or DOCX · max 10MB · auto-extracts all fields</p>
+                    <div style={{ fontSize: "40px", marginBottom: "16px", opacity: 0.5 }}>⬆</div>
+                    <p style={{ fontFamily: "'Syne',sans-serif", fontSize: "20px", fontWeight: "700", color: "#fffae6", marginBottom: "8px" }}>Drop your resume here</p>
+                    <p style={{ fontFamily: "'Outfit',sans-serif", fontSize: "13px", color: "rgba(255,250,230,0.3)" }}>PDF or DOCX · max 10MB</p>
                   </>
                 )}
               </div>
-              <input ref={fileRef} type="file" accept=".pdf,.docx" style={{display:"none"}} onChange={e=>handleUpload(e.target.files[0])} />
-
-              {uploadStatus && (
-                <div style={{
-                  marginTop:"16px", padding:"14px 20px", borderRadius:"6px", fontSize:"13px",
-                  background: uploadStatus.type==="success" ? "rgba(0,245,212,0.08)" : "rgba(255,77,0,0.08)",
-                  border:`1px solid ${uploadStatus.type==="success" ? "rgba(0,245,212,0.3)" : "rgba(255,77,0,0.3)"}`,
-                  color: uploadStatus.type==="success" ? "#00f5d4" : "#ff6b3d",
-                  fontFamily:"'Outfit',sans-serif",
-                }}>
-                  {uploadStatus.type==="success" ? "✓ " : "✕ "}{uploadStatus.msg}
-                </div>
-              )}
-              {uploadStatus?.type==="success" && (
-                <div style={{ display:"flex", gap:"12px", marginTop:"20px" }}>
-                  <button onClick={()=>setMode("form")} className="btn-3d btn-neon" style={{ borderRadius:"4px", padding:"12px 24px", fontSize:"13px" }}>Review Data</button>
-                  <button onClick={()=>navigate("/preview")} className="btn-3d btn-plasma" style={{ borderRadius:"4px", padding:"12px 24px", fontSize:"13px" }}>Preview Portfolio →</button>
-                </div>
-              )}
+              <input ref={fileRef} type="file" accept=".pdf,.docx" style={{ display: "none" }} onChange={e => handleUpload(e.target.files[0])} />
             </div>
           )}
 
           {/* Form mode */}
           {mode === "form" && (
-            <form onSubmit={handleSubmit}>
-              {/* Basic */}
+            <form onSubmit={handleFormSubmit}>
               {activeSection === "basic" && (
-                <div style={{ display:"grid", gap:"20px" }}>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
-                    <div><label style={labelStyle}>Full Name *</label><input style={inputStyle} value={form.name} onChange={e=>set("name",e.target.value)} required placeholder="Jordan Blake" onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`;e.target.style.boxShadow=`0 0 0 3px ${accentAlt}10`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)";e.target.style.boxShadow="none"}} /></div>
-                    <div><label style={labelStyle}>Job Title *</label><input style={inputStyle} value={form.title} onChange={e=>set("title",e.target.value)} required placeholder="Full Stack Developer" onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`;e.target.style.boxShadow=`0 0 0 3px ${accentAlt}10`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)";e.target.style.boxShadow="none"}} /></div>
+                <div style={{ display: "grid", gap: "20px" }}>
+                  {/* Photo row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px" }}>
+                    <div style={{ width: "56px", height: "56px", borderRadius: "50%", overflow: "hidden", border: `2px solid ${form.photo ? accentAlt + "60" : "rgba(255,255,255,0.1)"}`, background: "rgba(255,255,255,0.05)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {form.photo ? <img src={form.photo} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: "20px", opacity: 0.3 }}>◎</span>}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle}>Profile Photo URL</label>
+                      <input style={inputStyle} value={form.photo} onChange={e => set("photo", e.target.value)} placeholder="Auto-filled from LinkedIn, or paste a URL" onFocus={focusIn} onBlur={focusOut} />
+                    </div>
                   </div>
-                  <div><label style={labelStyle}>About / Summary</label><textarea style={{...inputStyle,resize:"none",minHeight:"100px",lineHeight:"1.7"}} value={form.about} onChange={e=>set("about",e.target.value)} placeholder="A compelling story about who you are and what you build…" onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} /></div>
-                  <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                    <button type="button" onClick={()=>setActiveSection("skills")} className="btn-3d btn-plasma" style={{ borderRadius:"4px" }}>Next: Skills →</button>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div><label style={labelStyle}>Full Name *</label><input style={inputStyle} value={form.name} onChange={e => set("name", e.target.value)} required placeholder="Jordan Blake" onFocus={focusIn} onBlur={focusOut} /></div>
+                    <div><label style={labelStyle}>Job Title *</label><input style={inputStyle} value={form.title} onChange={e => set("title", e.target.value)} required placeholder="Full Stack Developer" onFocus={focusIn} onBlur={focusOut} /></div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>About / Summary</label>
+                    <textarea style={{ ...inputStyle, resize: "none", minHeight: "100px", lineHeight: "1.7" }} value={form.about} onChange={e => set("about", e.target.value)} placeholder="A compelling story about who you are…" onFocus={focusIn} onBlur={focusOut} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button type="button" onClick={() => setActiveSection("skills")} className="btn-3d btn-plasma" style={{ borderRadius: "4px" }}>Next: Skills →</button>
                   </div>
                 </div>
               )}
 
-              {/* Skills */}
               {activeSection === "skills" && (
-                <div style={{ display:"grid", gap:"20px" }}>
+                <div style={{ display: "grid", gap: "20px" }}>
                   <div>
                     <label style={labelStyle}>Skills (comma-separated)</label>
-                    <textarea style={{...inputStyle,resize:"none",minHeight:"80px",lineHeight:"1.7"}} value={form.skills} onChange={e=>set("skills",e.target.value)} placeholder="React, Three.js, Node.js, TypeScript, AWS…" onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} />
+                    <textarea style={{ ...inputStyle, resize: "none", minHeight: "80px", lineHeight: "1.7" }} value={form.skills} onChange={e => set("skills", e.target.value)} placeholder="React, Three.js, Node.js…" onFocus={focusIn} onBlur={focusOut} />
                   </div>
-                  {/* Live skill preview */}
                   {form.skills && (
                     <div>
                       <div style={labelStyle}>Preview</div>
-                      <div style={{ display:"flex", flexWrap:"wrap", gap:"6px" }}>
-                        {form.skills.split(",").map(s=>s.trim()).filter(Boolean).map((s,i)=>(
-                          <span key={i} className="skill-pill" style={{ borderColor:`${accent}40`, color:`${accent}cc`, background:`${accent}10` }}>{s}</span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        {form.skills.split(",").map(s => s.trim()).filter(Boolean).map((s, i) => (
+                          <span key={i} className="skill-pill" style={{ borderColor: `${accent}40`, color: `${accent}cc`, background: `${accent}10` }}>{s}</span>
                         ))}
                       </div>
                     </div>
                   )}
-                  <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                    <button type="button" onClick={()=>setActiveSection("projects")} className="btn-3d btn-plasma" style={{ borderRadius:"4px" }}>Next: Projects →</button>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button type="button" onClick={() => setActiveSection("projects")} className="btn-3d btn-plasma" style={{ borderRadius: "4px" }}>Next: Projects →</button>
                   </div>
                 </div>
               )}
 
-              {/* Projects */}
               {activeSection === "projects" && (
-                <div style={{ display:"grid", gap:"16px" }}>
-                  {form.projects.map((p,i) => (
-                    <div key={i} style={{ background:"rgba(255,255,255,0.02)", border:`1px solid rgba(255,255,255,0.06)`, borderRadius:"8px", padding:"20px" }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:"10px", color:`${accent}80`, letterSpacing:"0.15em", textTransform:"uppercase" }}>Project {i+1}</span>
-                        {form.projects.length > 1 && <button type="button" onClick={()=>setForm(prev=>({...prev,projects:prev.projects.filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",color:"rgba(255,77,0,0.5)",cursor:"pointer",fontSize:"12px",fontFamily:"'JetBrains Mono',monospace"}}>remove ✕</button>}
+                <div style={{ display: "grid", gap: "16px" }}>
+                  {form.projects.map((p, i) => (
+                    <div key={i} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", padding: "20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", color: `${accent}80`, letterSpacing: "0.15em", textTransform: "uppercase" }}>Project {i + 1}</span>
+                        {form.projects.length > 1 && <button type="button" onClick={() => setForm(prev => ({ ...prev, projects: prev.projects.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", color: "rgba(255,77,0,0.5)", cursor: "pointer", fontSize: "12px", fontFamily: "'JetBrains Mono',monospace" }}>remove ✕</button>}
                       </div>
-                      <input style={{...inputStyle,marginBottom:"10px"}} placeholder="Project title" value={p.title} onChange={e=>setProj(i,"title",e.target.value)} onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} />
-                      <textarea style={{...inputStyle,resize:"none",minHeight:"60px"}} placeholder="What did you build and what impact did it have?" value={p.description} onChange={e=>setProj(i,"description",e.target.value)} onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} />
+                      <input style={{ ...inputStyle, marginBottom: "10px" }} placeholder="Project title" value={p.title} onChange={e => setProj(i, "title", e.target.value)} onFocus={focusIn} onBlur={focusOut} />
+                      <textarea style={{ ...inputStyle, resize: "none", minHeight: "60px" }} placeholder="Impact and description" value={p.description} onChange={e => setProj(i, "description", e.target.value)} onFocus={focusIn} onBlur={focusOut} />
                     </div>
                   ))}
-                  <div style={{ display:"flex", justifyContent:"space-between" }}>
-                    <button type="button" onClick={()=>setForm(prev=>({...prev,projects:[...prev.projects,{title:"",description:""}]}))} className="btn-3d btn-neon" style={{ borderRadius:"4px", padding:"10px 20px", fontSize:"12px" }}>+ Add Project</button>
-                    <button type="button" onClick={()=>setActiveSection("career")} className="btn-3d btn-plasma" style={{ borderRadius:"4px" }}>Next: Career →</button>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <button type="button" onClick={() => setForm(prev => ({ ...prev, projects: [...prev.projects, { title: "", description: "" }] }))} className="btn-3d btn-neon" style={{ borderRadius: "4px", padding: "10px 20px", fontSize: "12px" }}>+ Add Project</button>
+                    <button type="button" onClick={() => setActiveSection("career")} className="btn-3d btn-plasma" style={{ borderRadius: "4px" }}>Next: Career →</button>
                   </div>
                 </div>
               )}
 
-              {/* Career */}
               {activeSection === "career" && (
-                <div style={{ display:"grid", gap:"20px" }}>
+                <div style={{ display: "grid", gap: "20px" }}>
                   <div>
                     <label style={labelStyle}>Work Experience</label>
-                    <textarea style={{...inputStyle,resize:"none",minHeight:"120px",lineHeight:"1.8"}} value={form.experience} onChange={e=>set("experience",e.target.value)} placeholder={"Staff Engineer @ Vercel (2022–Present)\nSenior Engineer @ Stripe (2020–2022)"} onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} />
+                    <textarea style={{ ...inputStyle, resize: "none", minHeight: "120px", lineHeight: "1.8" }} value={form.experience} onChange={e => set("experience", e.target.value)} placeholder={"Staff Engineer @ Vercel (2022–Present)\nSenior Engineer @ Stripe (2020–2022)"} onFocus={focusIn} onBlur={focusOut} />
                   </div>
                   <div>
                     <label style={labelStyle}>Education</label>
-                    <textarea style={{...inputStyle,resize:"none",minHeight:"80px",lineHeight:"1.8"}} value={form.education} onChange={e=>set("education",e.target.value)} placeholder={"M.S. Computer Science — Stanford, 2019\nB.S. Software Engineering — UC Berkeley, 2017"} onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} />
+                    <textarea style={{ ...inputStyle, resize: "none", minHeight: "80px", lineHeight: "1.8" }} value={form.education} onChange={e => set("education", e.target.value)} placeholder={"M.S. Computer Science — Stanford, 2019"} onFocus={focusIn} onBlur={focusOut} />
                   </div>
-                  <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                    <button type="button" onClick={()=>setActiveSection("contact")} className="btn-3d btn-plasma" style={{ borderRadius:"4px" }}>Next: Contact →</button>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button type="button" onClick={() => setActiveSection("contact")} className="btn-3d btn-plasma" style={{ borderRadius: "4px" }}>Next: Contact →</button>
                   </div>
                 </div>
               )}
 
-              {/* Contact */}
               {activeSection === "contact" && (
-                <div style={{ display:"grid", gap:"16px" }}>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
-                    <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e=>set("email",e.target.value)} placeholder="you@domain.com" onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} /></div>
-                    <div><label style={labelStyle}>Phone</label><input style={inputStyle} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="+1 (555) 000-0000" onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} /></div>
-                    <div><label style={labelStyle}>LinkedIn</label><input style={inputStyle} value={form.linkedin} onChange={e=>set("linkedin",e.target.value)} placeholder="https://linkedin.com/in/..." onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} /></div>
-                    <div><label style={labelStyle}>GitHub</label><input style={inputStyle} value={form.github} onChange={e=>set("github",e.target.value)} placeholder="https://github.com/..." onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} /></div>
-                    <div style={{ gridColumn:"1/-1" }}><label style={labelStyle}>Website</label><input style={inputStyle} value={form.website} onChange={e=>set("website",e.target.value)} placeholder="https://yoursite.dev" onFocus={e=>{e.target.style.borderColor=`${accentAlt}60`}} onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.08)"}} /></div>
+                <div style={{ display: "grid", gap: "16px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="you@domain.com" onFocus={focusIn} onBlur={focusOut} /></div>
+                    <div><label style={labelStyle}>Phone</label><input style={inputStyle} value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="+1 (555) 000-0000" onFocus={focusIn} onBlur={focusOut} /></div>
+                    <div><label style={labelStyle}>LinkedIn</label><input style={inputStyle} value={form.linkedin} onChange={e => set("linkedin", e.target.value)} placeholder="https://linkedin.com/in/..." onFocus={focusIn} onBlur={focusOut} /></div>
+                    <div><label style={labelStyle}>GitHub</label><input style={inputStyle} value={form.github} onChange={e => set("github", e.target.value)} placeholder="https://github.com/..." onFocus={focusIn} onBlur={focusOut} /></div>
+                    <div style={{ gridColumn: "1/-1" }}><label style={labelStyle}>Website</label><input style={inputStyle} value={form.website} onChange={e => set("website", e.target.value)} placeholder="https://yoursite.dev" onFocus={focusIn} onBlur={focusOut} /></div>
                   </div>
-                  <div style={{ display:"flex", justifyContent:"flex-end", paddingTop:"8px" }}>
-                    <button type="submit" className="btn-3d btn-plasma" style={{ borderRadius:"4px", fontSize:"15px", padding:"16px 40px" }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "8px" }}>
+                    <button type="submit" className="btn-3d btn-plasma" style={{ borderRadius: "4px", fontSize: "15px", padding: "16px 40px" }}>
                       Generate Portfolio ✦
                     </button>
                   </div>
